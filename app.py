@@ -1,39 +1,64 @@
 ﻿import streamlit as st
 import pandas as pd
 
-# Configuración de pantalla ancha y nuevo título
+# Configuración de pantalla ancha y título
 st.set_page_config(page_title="Conformidad de entregas", layout="wide")
 st.title("📦 Conformidad de entregas")
 
-# Carga de datos
+# Carga de datos sin perder ningún registro
 @st.cache_data
 def cargar_datos():
     df = pd.read_parquet("movimientos_tiendas.parquet")
     
-    # Limpieza de espacios en blanco en los nombres de las columnas
+    # Limpieza básica de espacios en nombres de columnas
     df.columns = df.columns.str.strip()
     
-    # Procesamiento y creación de campos de Fecha
+    # 1. Creación de la clave Art-Mov
+    col_art = "Artículo" if "Artículo" in df.columns else ("BDART" if "BDART" in df.columns else None)
+    col_num = "Num Mov" if "Num Mov" in df.columns else ("BDNUM" if "BDNUM" in df.columns else None)
+    
+    if col_art and col_num:
+        art_s = df[col_art].fillna("SIN_ART").astype(str).str.strip()
+        num_s = df[col_num].fillna("0").astype(str).str.strip()
+        df["Art-Mov"] = art_s + "-" + num_s
+    
+    # 2. Tratamiento de Tiendas (preservando nulos como 'Sin Registro')
+    for col_t in ["Tienda", "Tienda que Grabo"]:
+        if col_t in df.columns:
+            df[col_t] = df[col_t].fillna("Sin Registro").astype(str).str.replace(r"\.0$", "", regex=True)
+    
+    # 3. Campos de Fecha manteniendo nulos
     if "Fecha del Movimiento" in df.columns:
         df["Fecha_DT"] = pd.to_datetime(df["Fecha del Movimiento"].astype(str), format="%Y%m%d", errors="coerce")
-        df["Fecha Formateada"] = df["Fecha_DT"].dt.strftime("%d/%m/%Y")
-        df["Año"] = df["Fecha_DT"].dt.year.fillna(0).astype(int)
-        df["Mes"] = df["Fecha_DT"].dt.month.fillna(0).astype(int)
-        df["Día"] = df["Fecha_DT"].dt.day.fillna(0).astype(int)
+        df["Fecha Formateada"] = df["Fecha_DT"].dt.strftime("%d/%m/%Y").fillna("Sin Fecha")
+        df["Año"] = df["Fecha_DT"].dt.year
+        df["Mes"] = df["Fecha_DT"].dt.month
+        df["N° Semana"] = df["Fecha_DT"].dt.isocalendar().week
+        df["Día"] = df["Fecha_DT"].dt.day
     
-    # Mapeo del campo: Estado Rectificación
+    # 4. Mapeo del Estado de Rectificación: Llenado explícito de NULOS
     if "Estado" in df.columns:
+        estado_limpio = df["Estado"].fillna("N").astype(str).str.strip().str.upper()
+        estado_limpio = estado_limpio.replace({"NAN": "N", "": "N", "NONE": "N"})
+        
         mapa_estados = {
             "M": "Confirmada",
             "R": "Rechazada",
-            "P": "Pendiente"
+            "P": "Pendiente",
+            "A": "Automática",
+            "N": "N - Nulo"
         }
-        df["Estado Rectificación"] = df["Estado"].astype(str).str.upper().map(mapa_estados).fillna(df["Estado"])
+        df["Estado Rectificación"] = estado_limpio.map(mapa_estados).fillna("N - Nulo")
     
-    # Asegurar tipos numéricos para métricas
-    for col in ["Total Unidades", "Precio medio de coste", "Total formatos del mvto", "Unid/Kgs grabados"]:
+    # 5. Métricas numéricas
+    for col in ["Total Unidades", "Precio medio de coste"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            
+    if "Precio medio de coste" in df.columns and "Total Unidades" in df.columns:
+        df["Costo_Linea"] = df["Precio medio de coste"] * df["Total Unidades"]
+    else:
+        df["Costo_Linea"] = 0
             
     return df
 
@@ -43,53 +68,74 @@ try:
     # Sidebar: Filtros de Búsqueda
     st.sidebar.header("🔍 Filtros de Búsqueda")
     
-    # 1. Filtro por Año
-    if "Año" in df.columns and df["Año"].max() > 0:
-        anios = sorted([int(x) for x in df["Año"].unique() if x > 0], reverse=True)
-        anio_sel = st.sidebar.multiselect("Año:", anios, default=anios)
-        df = df[df["Año"].isin(anio_sel)]
-
-    # 2. Filtro por Mes
-    if "Mes" in df.columns and df["Mes"].max() > 0:
-        meses = sorted([int(x) for x in df["Mes"].unique() if x > 0])
-        mes_sel = st.sidebar.multiselect("Mes:", meses, default=meses)
-        df = df[df["Mes"].isin(mes_sel)]
-
-    # 3. Filtro por Estado Rectificación
-    if "Estado Rectificación" in df.columns:
-        estados = sorted([str(x) for x in df["Estado Rectificación"].dropna().unique()])
-        estado_sel = st.sidebar.multiselect("Estado Rectificación:", estados, default=estados)
-        df = df[df["Estado Rectificación"].astype(str).isin(estado_sel)]
-
-    # 4. Filtro por Almacén
-    if "Almacen" in df.columns:
-        almacenes = sorted([str(x) for x in df["Almacen"].dropna().unique()])
-        almacen_sel = st.sidebar.multiselect("Almacén:", almacenes, default=almacenes)
-        df = df[df["Almacen"].astype(str).isin(almacen_sel)]
-
-    # 5. Filtro por Tienda Destino
+    # Filtro por Tienda Destino
     if "Tienda" in df.columns:
-        tiendas = sorted([str(x) for x in df["Tienda"].dropna().unique()])
-        tienda_sel = st.sidebar.multiselect("Tienda Destino:", tiendas, default=tiendas)
-        df = df[df["Tienda"].astype(str).isin(tienda_sel)]
+        tiendas = sorted([str(x) for x in df["Tienda"].unique()])
+        tienda_sel = st.sidebar.multiselect("Tienda:", tiendas, default=tiendas)
+        df = df[df["Tienda"].isin(tienda_sel)]
 
-    # Tarjetas de Métricas Principales (KPIs)
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    col1.metric("Total Registros", f"{len(df):,}")
+    # Filtro por Tienda que Grabó
+    if "Tienda que Grabo" in df.columns:
+        tiendas_grabo = sorted([str(x) for x in df["Tienda que Grabo"].unique()])
+        tienda_grabo_sel = st.sidebar.multiselect("Tienda que Grabó:", tiendas_grabo, default=tiendas_grabo)
+        df = df[df["Tienda que Grabo"].isin(tienda_grabo_sel)]
+
+    # Filtro por Estado Rectificación (Incluye N - Nulo)
+    if "Estado Rectificación" in df.columns:
+        estados = sorted([str(x) for x in df["Estado Rectificación"].unique()])
+        estado_sel = st.sidebar.multiselect("Estado Rectificación:", estados, default=estados)
+        df = df[df["Estado Rectificación"].isin(estado_sel)]
+
+    # Filtro por Almacén
+    if "Almacen" in df.columns:
+        almacenes = sorted([str(x) for x in df["Almacen"].fillna("Sin Almacén").astype(str).unique()])
+        almacen_sel = st.sidebar.multiselect("Almacén:", almacenes, default=almacenes)
+        df = df[df["Almacen"].fillna("Sin Almacén").astype(str).isin(almacen_sel)]
+
+    # Filtros de Tiempo
+    if "Año" in df.columns and df["Año"].notna().any():
+        anios = sorted([int(x) for x in df["Año"].dropna().unique()], reverse=True)
+        if anios:
+            anio_sel = st.sidebar.multiselect("Año:", anios, default=anios)
+            df = df[df["Año"].isin(anio_sel) | df["Año"].isna()]
+
+    if "Mes" in df.columns and df["Mes"].notna().any():
+        meses = sorted([int(x) for x in df["Mes"].dropna().unique()])
+        if meses:
+            mes_sel = st.sidebar.multiselect("Mes:", meses, default=meses)
+            df = df[df["Mes"].isin(mes_sel) | df["Mes"].isna()]
+
+    # FILA 1: Métricas Generales del Negocio
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Líneas Despachadas (Total)", f"{len(df):,}")
     
     if "Total Unidades" in df.columns:
-        col2.metric("Total Unidades", f"{int(df['Total Unidades'].sum()):,}")
+        m2.metric("Total Unidades", f"{int(df['Total Unidades'].sum(skipna=True)):,}")
         
+    costo_total = df["Costo_Linea"].sum(skipna=True) if "Costo_Linea" in df.columns else 0
+    m3.metric("Costo Total Est.", f"")
+
+    st.markdown("---")
+
+    # FILA 2: Recuento Individual por Cada Estado
+    st.subheader("📊 Desglose por Estado de Rectificación")
+    e1, e2, e3, e4, e5 = st.columns(5)
+    
     if "Estado Rectificación" in df.columns:
         confirmadas = len(df[df["Estado Rectificación"] == "Confirmada"])
-        col3.metric("Confirmadas (M)", f"{confirmadas:,}")
-        
+        e1.metric("Confirmadas (M)", f"{confirmadas:,}")
+
+        rechazadas = len(df[df["Estado Rectificación"] == "Rechazada"])
+        e2.metric("Rechazadas (R)", f"{rechazadas:,}")
+
         pendientes = len(df[df["Estado Rectificación"] == "Pendiente"])
-        col4.metric("Pendientes (P)", f"{pendientes:,}")
-        
-    if "Precio medio de coste" in df.columns:
-        col5.metric("Costo Total Est.", f"")
+        e3.metric("Pendientes (P)", f"{pendientes:,}")
+
+        automaticas = len(df[df["Estado Rectificación"] == "Automática"])
+        e4.metric("Automáticas (A)", f"{automaticas:,}")
+
+        nulas = len(df[df["Estado Rectificación"] == "N - Nulo"])
+        e5.metric("Nulas / Vacías (N)", f"{nulas:,}")
 
     st.markdown("---")
 
