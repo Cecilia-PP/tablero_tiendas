@@ -5,6 +5,10 @@ import plotly.express as px
 
 # Configuración de pantalla ancha y título
 st.set_page_config(page_title="Conformidad de entregas", layout="wide")
+
+# Etiqueta para bloquear la traducción automática del navegador y evitar el error removeChild
+st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
+
 st.title("📦 Conformidad de entregas")
 
 # Carga de datos sin perder ningún registro
@@ -213,7 +217,8 @@ try:
     nivel_seleccionado = st.selectbox(
         "Nivel de detalle para el Eje X de los gráficos:",
         options=list(opciones_eje_x.keys()),
-        index=2
+        index=2,
+        key="select_nivel_eje_x"
     )
     
     col_eje_x = opciones_eje_x[nivel_seleccionado]
@@ -224,14 +229,21 @@ try:
     if col_eje_x in df.columns:
         df_graf = df[df[col_eje_x].notna()].copy()
         
-        grouped = df_graf.groupby(col_eje_x, as_index=False).agg(
-            lineas_despachadas=(col_eje_x, "size"),
-            notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
-        )
+        # Agrupación asegurando orden temporal según la fecha datetime real
+        if nivel_seleccionado == "Fecha":
+            grouped = df_graf.groupby(["Fecha_DT", col_eje_x], as_index=False).agg(
+                lineas_despachadas=(col_eje_x, "size"),
+                notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
+            )
+            grouped = grouped.sort_values(by="Fecha_DT").reset_index(drop=True)
+        else:
+            grouped = df_graf.groupby(col_eje_x, as_index=False).agg(
+                lineas_despachadas=(col_eje_x, "size"),
+                notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
+            )
+            grouped = grouped.sort_values(by=col_eje_x).reset_index(drop=True)
 
-        grouped = grouped.sort_values(by=col_eje_x).reset_index(drop=True)
         grouped["pct_rectificadas"] = (grouped["notas_art"] / grouped["lineas_despachadas"]) * 100
-
         eje_x_labels = grouped[col_eje_x].astype(str)
 
         with c1:
@@ -265,7 +277,8 @@ try:
                 xaxis=dict(
                     title=nivel_seleccionado, 
                     type="category",
-                    categoryorder="category ascending",
+                    categoryorder="array",
+                    categoryarray=list(eje_x_labels),
                     tickangle=-45, 
                     tickfont=dict(size=10)
                 ),
@@ -290,10 +303,14 @@ try:
             df_rect = df_graf[df_graf["Estado Rectificación"].isin(["Anuladas", "Confirmada", "Pendientes"])].copy()
             
             if not df_rect.empty:
-                pivot_rect = df_rect.groupby([col_eje_x, "Estado Rectificación"]).size().unstack(fill_value=0)
-                pivot_rect = pivot_rect.sort_index()
-                pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
+                if nivel_seleccionado == "Fecha":
+                    pivot_rect = df_rect.groupby(["Fecha_DT", col_eje_x, "Estado Rectificación"]).size().unstack(fill_value=0)
+                    pivot_rect = pivot_rect.reset_index().sort_values(by="Fecha_DT").set_index(col_eje_x).drop(columns=["Fecha_DT"])
+                else:
+                    pivot_rect = df_rect.groupby([col_eje_x, "Estado Rectificación"]).size().unstack(fill_value=0)
+                    pivot_rect = pivot_rect.sort_index()
 
+                pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
                 eje_x_rect_labels = pivot_pct.index.astype(str)
 
                 with c2:
@@ -324,7 +341,8 @@ try:
                         xaxis=dict(
                             title=nivel_seleccionado, 
                             type="category",
-                            categoryorder="category ascending",
+                            categoryorder="array",
+                            categoryarray=list(eje_x_rect_labels),
                             tickangle=-45, 
                             tickfont=dict(size=10)
                         ),
