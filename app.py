@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -79,7 +79,7 @@ def cargar_datos():
             df.loc[es_valido, "Tienda que Grabo_Limpia"]
         )
 
-    # Respaldo inteligente por estado si Aux Art-Nota-tienda resulta vacío
+    # Respaldo por estado si Aux Art-Nota-tienda resulta vacío
     if df["Aux Art-Nota-tienda"].dropna().empty:
         es_rectificado = df["Estado Rectificación"] != "N - Nulo"
         artik_s = df[col_artik].fillna("SIN_ART").astype(str).str.strip().str.replace(r"\.0$", "", regex=True) if col_artik else df["Aux art-mov"]
