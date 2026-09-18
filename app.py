@@ -224,7 +224,6 @@ try:
     if col_eje_x in df.columns:
         df_graf = df[df[col_eje_x].notna()].copy()
         
-        # Conteo exacto de filas totales por período para líneas despachadas
         grouped = df_graf.groupby(col_eje_x, as_index=False).agg(
             lineas_despachadas=(col_eje_x, "size"),
             notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
@@ -284,7 +283,7 @@ try:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
             )
-            st.plotly_chart(fig1, width="stretch")
+            st.plotly_chart(fig1, width="stretch", key="grafico_lineas_despachadas")
 
         # GRÁFICO 2: Resolución líneas rectificadas
         if "Estado Rectificación" in df_graf.columns:
@@ -342,7 +341,7 @@ try:
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)"
                     )
-                    st.plotly_chart(fig2, width="stretch")
+                    st.plotly_chart(fig2, width="stretch", key="grafico_resolucion_rectificadas")
             else:
                 with c2:
                     st.markdown(f"**Resolución líneas rectificadas**")
@@ -406,11 +405,11 @@ try:
         df_final_tiendas = pd.concat([df_tiendas_disp, fila_total], ignore_index=True)
         df_final_tiendas["% líneas rectificadas"] = df_final_tiendas["% líneas rectificadas"].apply(lambda x: f"{x:.2f} %".replace(".", ","))
 
-        st.dataframe(df_final_tiendas, width="stretch", hide_index=True)
+        st.dataframe(df_final_tiendas, width="stretch", hide_index=True, key="tabla_resumen_tiendas")
 
-    # TABLA GENERAL CON DATOS FILTRADOS
+    # TABLA GENERAL DETALLADA
     st.subheader("📋 Detalle")
-    st.dataframe(df, width="stretch")
+    st.dataframe(df, width="stretch", key="tabla_detalle_general")
 
 except FileNotFoundError:
     st.error("⚠️ No se encontró el archivo 'movimientos_tiendas.parquet'.")
