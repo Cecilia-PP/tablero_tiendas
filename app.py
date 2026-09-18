@@ -158,27 +158,26 @@ try:
     if "N° Semana" in df.columns and "Estado Rectificación" in df.columns and "Art-Mov" in df.columns:
         df_sem = df[df["N° Semana"] > 0].copy()
         
-        # AGRUPACIÓN POR SEMANA - GRÁFICO 1
         grouped = df_sem.groupby("N° Semana").agg(
-            total_lineas=("Art-Mov", "nunique"),
-            rectificadas=("Art-Mov", lambda x: df_sem.loc[x.index][df_sem.loc[x.index, "Estado Rectificación"] != "N - Nulo"]["Art-Mov"].nunique())
+            lineas_despachadas=("Art-Mov", "nunique"),
+            lineas_rectificadas=("Art-Mov", lambda x: df_sem.loc[x.index][df_sem.loc[x.index, "Estado Rectificación"] != "N - Nulo"]["Art-Mov"].nunique())
         ).reset_index()
 
-        grouped["pct_rectificadas"] = (grouped["rectificadas"] / grouped["total_lineas"]) * 100
+        grouped["pct_rectificadas"] = (grouped["lineas_rectificadas"] / grouped["lineas_despachadas"]) * 100
 
         with c1:
-            st.subheader("Líneas despachadas vs líneas rectificadas (por Semana)")
+            st.subheader("Líneas despachadas vs líneas rectificadas")
             fig1 = go.Figure()
 
             # Barras Rosas
             fig1.add_trace(go.Bar(
                 x=grouped["N° Semana"],
-                y=grouped["rectificadas"],
-                name="Líneas rectificadas",
+                y=grouped["lineas_despachadas"],
+                name="Líneas despachadas",
                 marker_color="#F3C6E5"
             ))
 
-            # Línea Gris
+            # Línea Gris Oscuro (#555555) y etiquetas en #222222
             fig1.add_trace(go.Scatter(
                 x=grouped["N° Semana"],
                 y=grouped["pct_rectificadas"],
@@ -186,30 +185,39 @@ try:
                 mode="lines+markers+text",
                 text=[f"{v:.2f} %" for v in grouped["pct_rectificadas"]],
                 textposition="top center",
-                line=dict(color="#B0B0B0", width=3),
+                textfont=dict(color="#222222", size=12),
+                line=dict(color="#555555", width=3),
+                marker=dict(color="#555555", size=6),
                 yaxis="y2"
             ))
 
             fig1.update_layout(
-                xaxis=dict(title="Semana", dtick=1),
-                yaxis=dict(title="", showgrid=True),
-                yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                font=dict(color="#333333"),
+                xaxis=dict(title="Semana", dtick=1, tickfont=dict(color="#333333")),
+                yaxis=dict(title="", showgrid=True, tickfont=dict(color="#333333")),
+                yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False, tickfont=dict(color="#333333")),
+                legend=dict(
+                    orientation="h", 
+                    yanchor="bottom", 
+                    y=1.02, 
+                    xanchor="left", 
+                    x=0,
+                    font=dict(color="#222222", size=13)
+                ),
                 margin=dict(l=20, r=20, t=40, b=20),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
             )
             st.plotly_chart(fig1, use_container_width=True)
 
-        # AGRUPACIÓN POR SEMANA - GRÁFICO 2
+        # GRÁFICO 2: Resolución líneas rectificadas
         df_rect = df_sem[df_sem["Estado Rectificación"].isin(["Anuladas", "Confirmada", "Pendientes"])].copy()
         pivot_rect = df_rect.groupby(["N° Semana", "Estado Rectificación"])["Art-Mov"].nunique().unstack(fill_value=0)
 
-        # Normalizar a 100%
         pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
 
         with c2:
-            st.subheader("Resolución líneas rectificadas (por Semana)")
+            st.subheader("Resolución líneas rectificadas")
             fig2 = go.Figure()
 
             colors = {
@@ -226,14 +234,23 @@ try:
                         name=estado,
                         marker_color=colors.get(estado, "#CCCCCC"),
                         text=[f"{v:.2f}%" if v > 0 else "" for v in pivot_pct[estado]],
-                        textposition="inside"
+                        textposition="inside",
+                        textfont=dict(color="#222222", size=11)
                     ))
 
             fig2.update_layout(
                 barmode="stack",
-                xaxis=dict(title="Semana", dtick=1),
-                yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                font=dict(color="#333333"),
+                xaxis=dict(title="Semana", dtick=1, tickfont=dict(color="#333333")),
+                yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True, tickfont=dict(color="#333333")),
+                legend=dict(
+                    orientation="h", 
+                    yanchor="bottom", 
+                    y=1.02, 
+                    xanchor="left", 
+                    x=0,
+                    font=dict(color="#222222", size=13)
+                ),
                 margin=dict(l=20, r=20, t=40, b=20),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
