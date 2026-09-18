@@ -90,13 +90,13 @@ def cargar_datos():
         )
 
     # 6. Campos de Fecha manteniendo nulos
-    if "Fecha del Movimiento" in df.columns:
-        df["Fecha_DT"] = pd.to_datetime(df["Fecha del Movimiento"].astype(str), format="%Y%m%d", errors="coerce")
-        df["Fecha Formateada"] = df["Fecha_DT"].dt.strftime("%d/%m/%Y").fillna("Sin Fecha")
-        df["Año"] = df["Fecha_DT"].dt.year
-        df["Mes"] = df["Fecha_DT"].dt.month
-        df["N° Semana"] = df["Fecha_DT"].dt.isocalendar().week
-        df["Día"] = df["Fecha_DT"].dt.day
+    col_fecha = "Fecha del Movimiento" if "Fecha del Movimiento" in df.columns else [c for c in df.columns if "FEC" in c.upper()][0]
+    df["Fecha_DT"] = pd.to_datetime(df[col_fecha].astype(str), format="%Y%m%d", errors="coerce")
+    df["Fecha Formateada"] = df["Fecha_DT"].dt.strftime("%d/%m/%Y").fillna("Sin Fecha")
+    df["Año"] = df["Fecha_DT"].dt.year
+    df["Mes"] = df["Fecha_DT"].dt.month
+    df["N° Semana"] = df["Fecha_DT"].dt.isocalendar().week
+    df["Día"] = df["Fecha_DT"].dt.day
 
     # 7. Tratamiento de Área
     col_area = "AREA" if "AREA" in df.columns else ("Area" if "Area" in df.columns else None)
@@ -168,11 +168,7 @@ try:
     # FILA 1: Métricas Generales
     m1, m2, m3 = st.columns(3)
     
-    if "Aux art-mov" in df.columns:
-        art_mov_unicos = df["Aux art-mov"].nunique()
-        m1.metric("Líneas Despachadas (Aux art-mov Únicos)", f"{art_mov_unicos:,}")
-    else:
-        m1.metric("Líneas Despachadas", f"{len(df):,}")
+    m1.metric("Líneas Despachadas", f"{len(df):,}")
         
     if "Total Unidades" in df.columns:
         m2.metric("Total Unidades", f"{int(df['Total Unidades'].sum(skipna=True)):,}")
@@ -183,23 +179,23 @@ try:
     st.markdown("---")
 
     # FILA 2: Recuento por Estado
-    st.subheader("📊 Desglose por Estado de Rectificación (Aux art-mov Únicos)")
+    st.subheader("📊 Desglose por Estado de Rectificación")
     e1, e2, e3, e4, e5 = st.columns(5)
     
-    if "Estado Rectificación" in df.columns and "Aux art-mov" in df.columns:
-        confirmadas = df[df["Estado Rectificación"] == "Confirmada"]["Aux art-mov"].nunique()
+    if "Estado Rectificación" in df.columns:
+        confirmadas = len(df[df["Estado Rectificación"] == "Confirmada"])
         e1.metric("Confirmadas (M)", f"{confirmadas:,}")
 
-        rechazadas = df[df["Estado Rectificación"] == "Anuladas"]["Aux art-mov"].nunique()
+        rechazadas = len(df[df["Estado Rectificación"] == "Anuladas"])
         e2.metric("Anuladas (R)", f"{rechazadas:,}")
 
-        pendientes = df[df["Estado Rectificación"] == "Pendientes"]["Aux art-mov"].nunique()
+        pendientes = len(df[df["Estado Rectificación"] == "Pendientes"])
         e3.metric("Pendientes (P)", f"{pendientes:,}")
 
-        automaticas = df[df["Estado Rectificación"] == "Automática"]["Aux art-mov"].nunique()
+        automaticas = len(df[df["Estado Rectificación"] == "Automática"])
         e4.metric("Automáticas (A)", f"{automaticas:,}")
 
-        nulas = df[df["Estado Rectificación"] == "N - Nulo"]["Aux art-mov"].nunique()
+        nulas = len(df[df["Estado Rectificación"] == "N - Nulo"])
         e5.metric("Nulas / Vacías (N)", f"{nulas:,}")
 
     st.markdown("---")
@@ -225,11 +221,12 @@ try:
     # SECCIÓN DE GRÁFICOS
     c1, c2 = st.columns(2)
 
-    if col_eje_x in df.columns and "Aux art-mov" in df.columns:
+    if col_eje_x in df.columns:
         df_graf = df[df[col_eje_x].notna()].copy()
         
+        # Conteo exacto de filas totales por período para líneas despachadas
         grouped = df_graf.groupby(col_eje_x, as_index=False).agg(
-            lineas_despachadas=("Aux art-mov", "nunique"),
+            lineas_despachadas=(col_eje_x, "size"),
             notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
         )
 
@@ -247,10 +244,10 @@ try:
                 x=eje_x_labels,
                 y=grouped["lineas_despachadas"],
                 name="Líneas despachadas",
-                marker_color="#F3C6E5"
+                marker_color="#E06666"
             ))
 
-            # Línea Gris Oscuro
+            # Línea Azul
             fig1.add_trace(go.Scatter(
                 x=eje_x_labels,
                 y=grouped["pct_rectificadas"],
@@ -258,30 +255,30 @@ try:
                 mode="lines+markers+text",
                 text=[f"{v:.2f} %" if pd.notna(v) else "0.00 %" for v in grouped["pct_rectificadas"]],
                 textposition="top center",
-                textfont=dict(color="#222222", size=11),
-                line=dict(color="#555555", width=3),
-                marker=dict(color="#555555", size=6),
+                textfont=dict(size=11),
+                line=dict(color="#1155CC", width=3),
+                marker=dict(color="#1155CC", size=7),
                 yaxis="y2"
             ))
 
             fig1.update_layout(
-                font=dict(color="#333333"),
+                template="streamlit",
                 xaxis=dict(
                     title=nivel_seleccionado, 
                     type="category",
                     categoryorder="category ascending",
                     tickangle=-45, 
-                    tickfont=dict(color="#333333", size=9)
+                    tickfont=dict(size=10)
                 ),
-                yaxis=dict(title="", showgrid=True, tickfont=dict(color="#333333")),
-                yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False, tickfont=dict(color="#333333")),
+                yaxis=dict(title="", showgrid=True),
+                yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False),
                 legend=dict(
                     orientation="h", 
                     yanchor="bottom", 
                     y=1.02, 
                     xanchor="left", 
                     x=0,
-                    font=dict(color="#222222", size=12)
+                    font=dict(size=12)
                 ),
                 margin=dict(l=20, r=20, t=40, b=30),
                 paper_bgcolor="rgba(0,0,0,0)",
@@ -294,7 +291,7 @@ try:
             df_rect = df_graf[df_graf["Estado Rectificación"].isin(["Anuladas", "Confirmada", "Pendientes"])].copy()
             
             if not df_rect.empty:
-                pivot_rect = df_rect.groupby([col_eje_x, "Estado Rectificación"])["Aux art-mov"].nunique().unstack(fill_value=0)
+                pivot_rect = df_rect.groupby([col_eje_x, "Estado Rectificación"]).size().unstack(fill_value=0)
                 pivot_rect = pivot_rect.sort_index()
                 pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
 
@@ -305,9 +302,9 @@ try:
                     fig2 = go.Figure()
 
                     colors = {
-                        "Anuladas": "#F5B79B",
-                        "Confirmada": "#9CD0FF",
-                        "Pendientes": "#FBE683"
+                        "Anuladas": "#E69138",
+                        "Confirmada": "#4A90E2",
+                        "Pendientes": "#F1C232"
                     }
 
                     for estado in ["Anuladas", "Confirmada", "Pendientes"]:
@@ -319,27 +316,27 @@ try:
                                 marker_color=colors.get(estado, "#CCCCCC"),
                                 text=[f"{v:.2f}%" if v > 0 else "" for v in pivot_pct[estado]],
                                 textposition="inside",
-                                textfont=dict(color="#222222", size=10)
+                                textfont=dict(color="#000000", size=10)
                             ))
 
                     fig2.update_layout(
+                        template="streamlit",
                         barmode="stack",
-                        font=dict(color="#333333"),
                         xaxis=dict(
                             title=nivel_seleccionado, 
                             type="category",
                             categoryorder="category ascending",
                             tickangle=-45, 
-                            tickfont=dict(color="#333333", size=9)
+                            tickfont=dict(size=10)
                         ),
-                        yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True, tickfont=dict(color="#333333")),
+                        yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True),
                         legend=dict(
                             orientation="h", 
                             yanchor="bottom", 
                             y=1.02, 
                             xanchor="left", 
                             x=0,
-                            font=dict(color="#222222", size=12)
+                            font=dict(size=12)
                         ),
                         margin=dict(l=20, r=20, t=40, b=30),
                         paper_bgcolor="rgba(0,0,0,0)",
@@ -353,68 +350,49 @@ try:
 
     st.markdown("---")
 
-    # TABLA DE RECTIFICACIONES POR TIENDA DETALLADA CON COLUMNAS DE ESTADO
+    # TABLA DE RECTIFICACIONES POR TIENDA DETALLADA
     st.subheader("🏪 Detalle de Rectificaciones por Tienda")
     
-    if "Tienda que Grabo_Limpia" in df.columns and "Aux art-mov" in df.columns and "Estado Rectificación" in df.columns:
-        # Agrupación por Tienda para Totales Generales y Despachos
+    if "Tienda que Grabo_Limpia" in df.columns and "Aux Art-Nota-tienda" in df.columns and "Estado Rectificación" in df.columns:
         base_tiendas = df.groupby("Tienda que Grabo_Limpia", as_index=False).agg(
-            lineas_despachadas=("Aux art-mov", "nunique"),
+            lineas_despachadas=("Tienda que Grabo_Limpia", "size"),
             lineas_rectificadas=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
         )
 
-        # Filtrar solo líneas con estado de rectificación activo (no nulas)
-        df_rect_estados = df[df["Estado Rectificación"] != "N - Nulo"].copy()
+        df_rect_notas = df[df["Aux Art-Nota-tienda"].notna() & (df["Estado Rectificación"] != "N - Nulo")].copy()
 
-        # Matriz por Tienda y Estado de Rectificación
-        pivot_estados = df_rect_estados.groupby(["Tienda que Grabo_Limpia", "Estado Rectificación"])["Aux art-mov"].nunique().unstack(fill_value=0)
+        pivot_estados = df_rect_notas.groupby(["Tienda que Grabo_Limpia", "Estado Rectificación"])["Aux Art-Nota-tienda"].nunique().unstack(fill_value=0)
 
-        # Unir totales con la matriz de estados
         tabla_tiendas = base_tiendas.merge(pivot_estados, on="Tienda que Grabo_Limpia", how="left").fillna(0)
 
-        # Garantizar que existan las columnas de interés
         for est_col in ["Confirmada", "Pendientes", "Anuladas", "Automática"]:
             if est_col not in tabla_tiendas.columns:
                 tabla_tiendas[est_col] = 0
 
-        # Calcular % lineas rectificadas
         tabla_tiendas["pct_rectificadas_num"] = (tabla_tiendas["lineas_rectificadas"] / tabla_tiendas["lineas_despachadas"]) * 100
-
-        # Ordenar por Líneas rectificadas descendente
         tabla_tiendas = tabla_tiendas.sort_values(by="lineas_rectificadas", ascending=False).reset_index(drop=True)
 
-        # Totales Generales Acumulados
-        tot_despachadas = df["Aux art-mov"].nunique()
+        tot_despachadas = len(df)
         tot_rectificadas = df["Aux Art-Nota-tienda"].dropna().nunique()
-        tot_confirmadas = df[df["Estado Rectificación"] == "Confirmada"]["Aux art-mov"].nunique()
-        tot_pendientes = df[df["Estado Rectificación"] == "Pendientes"]["Aux art-mov"].nunique()
-        tot_anuladas = df[df["Estado Rectificación"] == "Anuladas"]["Aux art-mov"].nunique()
-        tot_automaticas = df[df["Estado Rectificación"] == "Automática"]["Aux art-mov"].nunique()
+        
+        tot_confirmadas = df_rect_notas[df_rect_notas["Estado Rectificación"] == "Confirmada"]["Aux Art-Nota-tienda"].nunique()
+        tot_pendientes = df_rect_notas[df_rect_notas["Estado Rectificación"] == "Pendientes"]["Aux Art-Nota-tienda"].nunique()
+        tot_anuladas = df_rect_notas[df_rect_notas["Estado Rectificación"] == "Anuladas"]["Aux Art-Nota-tienda"].nunique()
+        tot_automaticas = df_rect_notas[df_rect_notas["Estado Rectificación"] == "Automática"]["Aux Art-Nota-tienda"].nunique()
+        
         tot_pct = (tot_rectificadas / tot_despachadas * 100) if tot_despachadas > 0 else 0
 
-        # Selección y Reordenamiento de Columnas
         cols_select = [
-            "Tienda que Grabo_Limpia", 
-            "lineas_rectificadas", 
-            "Confirmada", 
-            "Pendientes", 
-            "Anuladas", 
-            "Automática", 
-            "pct_rectificadas_num"
+            "Tienda que Grabo_Limpia", "lineas_rectificadas", 
+            "Confirmada", "Pendientes", "Anuladas", "Automática", "pct_rectificadas_num"
         ]
 
         df_tiendas_disp = tabla_tiendas[cols_select].copy()
         df_tiendas_disp.columns = [
-            "Tienda", 
-            "Líneas rectificadas", 
-            "Confirmadas (M)", 
-            "Pendientes (P)", 
-            "Anuladas (R)", 
-            "Automáticas (A)", 
-            "% líneas rectificadas"
+            "Tienda", "Líneas rectificadas", "Confirmadas (M)", 
+            "Pendientes (P)", "Anuladas (R)", "Automáticas (A)", "% líneas rectificadas"
         ]
 
-        # Fila de Total General
         fila_total = pd.DataFrame([{
             "Tienda": "Total",
             "Líneas rectificadas": tot_rectificadas,
@@ -426,14 +404,12 @@ try:
         }])
 
         df_final_tiendas = pd.concat([df_tiendas_disp, fila_total], ignore_index=True)
-
-        # Formatear el porcentaje a string con coma decimal (ej. 8,59 %)
         df_final_tiendas["% líneas rectificadas"] = df_final_tiendas["% líneas rectificadas"].apply(lambda x: f"{x:.2f} %".replace(".", ","))
 
         st.dataframe(df_final_tiendas, width="stretch", hide_index=True)
 
-    # Tabla General con Datos Filtrados
-    st.subheader("📋 Registros Filtrados")
+    # TABLA GENERAL CON DATOS FILTRADOS
+    st.subheader("📋 Detalle")
     st.dataframe(df, width="stretch")
 
 except FileNotFoundError:
