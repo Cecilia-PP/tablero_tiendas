@@ -64,7 +64,7 @@ def cargar_datos():
     else:
         df["Estado Rectificación"] = "N - Nulo"
 
-    # 5. Creación de Aux Art-Nota-tienda = IF(NUDVRE=BLANK(), BLANK(), ARTIK & "-" & NUDVRE & "-" & TIEND)
+    # 5. Creación de Aux Art-Nota-tienda
     df["Aux Art-Nota-tienda"] = None
     
     if col_nudvre and col_artik:
@@ -79,7 +79,7 @@ def cargar_datos():
             df.loc[es_valido, "Tienda que Grabo_Limpia"]
         )
 
-    # Si Aux Art-Nota-tienda sigue vacío para todos, usamos la rectificación por Estado (Backup inteligente)
+    # Respaldo inteligente por estado si Aux Art-Nota-tienda resulta vacío
     if df["Aux Art-Nota-tienda"].dropna().empty:
         es_rectificado = df["Estado Rectificación"] != "N - Nulo"
         artik_s = df[col_artik].fillna("SIN_ART").astype(str).str.strip().str.replace(r"\.0$", "", regex=True) if col_artik else df["Aux art-mov"]
@@ -216,7 +216,6 @@ try:
             notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
         ).reset_index()
 
-        # % lineas rectificadas = [Notas- Art] / COUNT(Aux art-mov) * 100
         grouped["pct_rectificadas"] = (grouped["notas_art"] / grouped["lineas_despachadas"]) * 100
 
         with c1:
@@ -262,7 +261,7 @@ try:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
             )
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
         # GRÁFICO 2: Resolución líneas rectificadas
         if "Estado Rectificación" in df_sem.columns:
@@ -310,11 +309,11 @@ try:
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)"
                 )
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, width="stretch")
 
     # Tabla con Datos
     st.subheader("📋 Registros Filtrados")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
 except FileNotFoundError:
     st.error("⚠️ No se encontró el archivo 'movimientos_tiendas.parquet'.")
