@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -15,7 +15,7 @@ def cargar_datos():
     # Limpieza básica de espacios en nombres de columnas
     df.columns = df.columns.str.strip()
     
-    # 1. Identificación de columnas base según esquema
+    # 1. Identificación de columnas base
     col_art = "BDART" if "BDART" in df.columns else ("Artículo" if "Artículo" in df.columns else None)
     col_num = "BDNUM" if "BDNUM" in df.columns else ("Num Mov" if "Num Mov" in df.columns else None)
     col_artik = "ARTIK" if "ARTIK" in df.columns else col_art
@@ -32,7 +32,7 @@ def cargar_datos():
             col_nudvre = c
             break
 
-    # 2. Creación de Aux art-mov = BDMVTAL[BDART] & "-" & BDMVTAL[BDNUM]
+    # 2. Creación de Aux art-mov
     if col_art and col_num:
         art_s = df[col_art].fillna("SIN_ART").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
         num_s = df[col_num].fillna("0").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
@@ -48,7 +48,7 @@ def cargar_datos():
     else:
         df["Tienda que Grabo_Limpia"] = "Sin Registro"
 
-    # 4. Mapeo del Estado de Rectificación primero
+    # 4. Mapeo del Estado de Rectificación
     if "Estado" in df.columns:
         estado_limpio = df["Estado"].fillna("N").astype(str).str.strip().str.upper()
         estado_limpio = estado_limpio.replace({"NAN": "N", "": "N", "NONE": "N"})
@@ -70,7 +70,6 @@ def cargar_datos():
     if col_nudvre and col_artik:
         nudvre_s = df[col_nudvre].fillna("").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
         es_valido = (~nudvre_s.isin(["", "nan", "None", "0", "NAN"]))
-        
         artik_s = df[col_artik].fillna("SIN_ART").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
         
         df.loc[es_valido, "Aux Art-Nota-tienda"] = (
@@ -79,7 +78,7 @@ def cargar_datos():
             df.loc[es_valido, "Tienda que Grabo_Limpia"]
         )
 
-    # Respaldo por estado si Aux Art-Nota-tienda resulta vacío
+    # Respaldo por estado si resulta vacío
     if df["Aux Art-Nota-tienda"].dropna().empty:
         es_rectificado = df["Estado Rectificación"] != "N - Nulo"
         artik_s = df[col_artik].fillna("SIN_ART").astype(str).str.strip().str.replace(r"\.0$", "", regex=True) if col_artik else df["Aux art-mov"]
@@ -205,26 +204,47 @@ try:
 
     st.markdown("---")
 
-    # SECCIÓN DE GRÁFICOS AGRUPADOS POR N° SEMANA
+    # CONTROLES ÚNICOS DE NIVEL DE AGRUPACIÓN PARA EL EJE X
+    st.subheader("📈 Visualización Temporal")
+    
+    opciones_eje_x = {
+        "Año": "Año",
+        "Mes": "Mes",
+        "Semana": "N° Semana",
+        "Fecha": "Fecha Formateada"
+    }
+    
+    nivel_seleccionado = st.selectbox(
+        "Nivel de detalle para el Eje X de los gráficos:",
+        options=list(opciones_eje_x.keys()),
+        index=2
+    )
+    
+    col_eje_x = opciones_eje_x[nivel_seleccionado]
+
+    # SECCIÓN DE GRÁFICOS
     c1, c2 = st.columns(2)
 
-    if "N° Semana" in df.columns and "Aux art-mov" in df.columns:
-        df_sem = df[df["N° Semana"] > 0].copy()
+    if col_eje_x in df.columns and "Aux art-mov" in df.columns:
+        df_graf = df[df[col_eje_x].notna()].copy()
         
-        grouped = df_sem.groupby("N° Semana").agg(
+        grouped = df_graf.groupby(col_eje_x, as_index=False).agg(
             lineas_despachadas=("Aux art-mov", "nunique"),
             notas_art=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
-        ).reset_index()
+        )
 
+        grouped = grouped.sort_values(by=col_eje_x).reset_index(drop=True)
         grouped["pct_rectificadas"] = (grouped["notas_art"] / grouped["lineas_despachadas"]) * 100
 
+        eje_x_labels = grouped[col_eje_x].astype(str)
+
         with c1:
-            st.subheader("Líneas despachadas vs líneas rectificadas")
+            st.markdown(f"**Líneas despachadas vs rectificadas**")
             fig1 = go.Figure()
 
             # Barras Rosas
             fig1.add_trace(go.Bar(
-                x=grouped["N° Semana"],
+                x=eje_x_labels,
                 y=grouped["lineas_despachadas"],
                 name="Líneas despachadas",
                 marker_color="#F3C6E5"
@@ -232,13 +252,13 @@ try:
 
             # Línea Gris Oscuro
             fig1.add_trace(go.Scatter(
-                x=grouped["N° Semana"],
+                x=eje_x_labels,
                 y=grouped["pct_rectificadas"],
                 name="% líneas rectificadas",
                 mode="lines+markers+text",
                 text=[f"{v:.2f} %" if pd.notna(v) else "0.00 %" for v in grouped["pct_rectificadas"]],
                 textposition="top center",
-                textfont=dict(color="#222222", size=12),
+                textfont=dict(color="#222222", size=11),
                 line=dict(color="#555555", width=3),
                 marker=dict(color="#555555", size=6),
                 yaxis="y2"
@@ -246,7 +266,13 @@ try:
 
             fig1.update_layout(
                 font=dict(color="#333333"),
-                xaxis=dict(title="Semana", dtick=1, tickfont=dict(color="#333333")),
+                xaxis=dict(
+                    title=nivel_seleccionado, 
+                    type="category",
+                    categoryorder="category ascending",
+                    tickangle=-45, 
+                    tickfont=dict(color="#333333", size=9)
+                ),
                 yaxis=dict(title="", showgrid=True, tickfont=dict(color="#333333")),
                 yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False, tickfont=dict(color="#333333")),
                 legend=dict(
@@ -255,63 +281,158 @@ try:
                     y=1.02, 
                     xanchor="left", 
                     x=0,
-                    font=dict(color="#222222", size=13)
+                    font=dict(color="#222222", size=12)
                 ),
-                margin=dict(l=20, r=20, t=40, b=20),
+                margin=dict(l=20, r=20, t=40, b=30),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)"
             )
             st.plotly_chart(fig1, width="stretch")
 
         # GRÁFICO 2: Resolución líneas rectificadas
-        if "Estado Rectificación" in df_sem.columns:
-            df_rect = df_sem[df_sem["Estado Rectificación"].isin(["Anuladas", "Confirmada", "Pendientes"])].copy()
-            pivot_rect = df_rect.groupby(["N° Semana", "Estado Rectificación"])["Aux art-mov"].nunique().unstack(fill_value=0)
+        if "Estado Rectificación" in df_graf.columns:
+            df_rect = df_graf[df_graf["Estado Rectificación"].isin(["Anuladas", "Confirmada", "Pendientes"])].copy()
+            
+            if not df_rect.empty:
+                pivot_rect = df_rect.groupby([col_eje_x, "Estado Rectificación"])["Aux art-mov"].nunique().unstack(fill_value=0)
+                pivot_rect = pivot_rect.sort_index()
+                pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
 
-            pivot_pct = pivot_rect.div(pivot_rect.sum(axis=1), axis=0) * 100
+                eje_x_rect_labels = pivot_pct.index.astype(str)
 
-            with c2:
-                st.subheader("Resolución líneas rectificadas")
-                fig2 = go.Figure()
+                with c2:
+                    st.markdown(f"**Resolución líneas rectificadas**")
+                    fig2 = go.Figure()
 
-                colors = {
-                    "Anuladas": "#F5B79B",
-                    "Confirmada": "#9CD0FF",
-                    "Pendientes": "#FBE683"
-                }
+                    colors = {
+                        "Anuladas": "#F5B79B",
+                        "Confirmada": "#9CD0FF",
+                        "Pendientes": "#FBE683"
+                    }
 
-                for estado in ["Anuladas", "Confirmada", "Pendientes"]:
-                    if estado in pivot_pct.columns:
-                        fig2.add_trace(go.Bar(
-                            x=pivot_pct.index,
-                            y=pivot_pct[estado],
-                            name=estado,
-                            marker_color=colors.get(estado, "#CCCCCC"),
-                            text=[f"{v:.2f}%" if v > 0 else "" for v in pivot_pct[estado]],
-                            textposition="inside",
-                            textfont=dict(color="#222222", size=11)
-                        ))
+                    for estado in ["Anuladas", "Confirmada", "Pendientes"]:
+                        if estado in pivot_pct.columns:
+                            fig2.add_trace(go.Bar(
+                                x=eje_x_rect_labels,
+                                y=pivot_pct[estado],
+                                name=estado,
+                                marker_color=colors.get(estado, "#CCCCCC"),
+                                text=[f"{v:.2f}%" if v > 0 else "" for v in pivot_pct[estado]],
+                                textposition="inside",
+                                textfont=dict(color="#222222", size=10)
+                            ))
 
-                fig2.update_layout(
-                    barmode="stack",
-                    font=dict(color="#333333"),
-                    xaxis=dict(title="Semana", dtick=1, tickfont=dict(color="#333333")),
-                    yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True, tickfont=dict(color="#333333")),
-                    legend=dict(
-                        orientation="h", 
-                        yanchor="bottom", 
-                        y=1.02, 
-                        xanchor="left", 
-                        x=0,
-                        font=dict(color="#222222", size=13)
-                    ),
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)"
-                )
-                st.plotly_chart(fig2, width="stretch")
+                    fig2.update_layout(
+                        barmode="stack",
+                        font=dict(color="#333333"),
+                        xaxis=dict(
+                            title=nivel_seleccionado, 
+                            type="category",
+                            categoryorder="category ascending",
+                            tickangle=-45, 
+                            tickfont=dict(color="#333333", size=9)
+                        ),
+                        yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True, tickfont=dict(color="#333333")),
+                        legend=dict(
+                            orientation="h", 
+                            yanchor="bottom", 
+                            y=1.02, 
+                            xanchor="left", 
+                            x=0,
+                            font=dict(color="#222222", size=12)
+                        ),
+                        margin=dict(l=20, r=20, t=40, b=30),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig2, width="stretch")
+            else:
+                with c2:
+                    st.markdown(f"**Resolución líneas rectificadas**")
+                    st.info("No hay rectificaciones registradas para el nivel de filtro seleccionado.")
 
-    # Tabla con Datos
+    st.markdown("---")
+
+    # TABLA DE RECTIFICACIONES POR TIENDA DETALLADA CON COLUMNAS DE ESTADO
+    st.subheader("🏪 Detalle de Rectificaciones por Tienda")
+    
+    if "Tienda que Grabo_Limpia" in df.columns and "Aux art-mov" in df.columns and "Estado Rectificación" in df.columns:
+        # Agrupación por Tienda para Totales Generales y Despachos
+        base_tiendas = df.groupby("Tienda que Grabo_Limpia", as_index=False).agg(
+            lineas_despachadas=("Aux art-mov", "nunique"),
+            lineas_rectificadas=("Aux Art-Nota-tienda", lambda x: x.dropna().nunique())
+        )
+
+        # Filtrar solo líneas con estado de rectificación activo (no nulas)
+        df_rect_estados = df[df["Estado Rectificación"] != "N - Nulo"].copy()
+
+        # Matriz por Tienda y Estado de Rectificación
+        pivot_estados = df_rect_estados.groupby(["Tienda que Grabo_Limpia", "Estado Rectificación"])["Aux art-mov"].nunique().unstack(fill_value=0)
+
+        # Unir totales con la matriz de estados
+        tabla_tiendas = base_tiendas.merge(pivot_estados, on="Tienda que Grabo_Limpia", how="left").fillna(0)
+
+        # Garantizar que existan las columnas de interés
+        for est_col in ["Confirmada", "Pendientes", "Anuladas", "Automática"]:
+            if est_col not in tabla_tiendas.columns:
+                tabla_tiendas[est_col] = 0
+
+        # Calcular % lineas rectificadas
+        tabla_tiendas["pct_rectificadas_num"] = (tabla_tiendas["lineas_rectificadas"] / tabla_tiendas["lineas_despachadas"]) * 100
+
+        # Ordenar por Líneas rectificadas descendente
+        tabla_tiendas = tabla_tiendas.sort_values(by="lineas_rectificadas", ascending=False).reset_index(drop=True)
+
+        # Totales Generales Acumulados
+        tot_despachadas = df["Aux art-mov"].nunique()
+        tot_rectificadas = df["Aux Art-Nota-tienda"].dropna().nunique()
+        tot_confirmadas = df[df["Estado Rectificación"] == "Confirmada"]["Aux art-mov"].nunique()
+        tot_pendientes = df[df["Estado Rectificación"] == "Pendientes"]["Aux art-mov"].nunique()
+        tot_anuladas = df[df["Estado Rectificación"] == "Anuladas"]["Aux art-mov"].nunique()
+        tot_automaticas = df[df["Estado Rectificación"] == "Automática"]["Aux art-mov"].nunique()
+        tot_pct = (tot_rectificadas / tot_despachadas * 100) if tot_despachadas > 0 else 0
+
+        # Selección y Reordenamiento de Columnas
+        cols_select = [
+            "Tienda que Grabo_Limpia", 
+            "lineas_rectificadas", 
+            "Confirmada", 
+            "Pendientes", 
+            "Anuladas", 
+            "Automática", 
+            "pct_rectificadas_num"
+        ]
+
+        df_tiendas_disp = tabla_tiendas[cols_select].copy()
+        df_tiendas_disp.columns = [
+            "Tienda", 
+            "Líneas rectificadas", 
+            "Confirmadas (M)", 
+            "Pendientes (P)", 
+            "Anuladas (R)", 
+            "Automáticas (A)", 
+            "% líneas rectificadas"
+        ]
+
+        # Fila de Total General
+        fila_total = pd.DataFrame([{
+            "Tienda": "Total",
+            "Líneas rectificadas": tot_rectificadas,
+            "Confirmadas (M)": tot_confirmadas,
+            "Pendientes (P)": tot_pendientes,
+            "Anuladas (R)": tot_anuladas,
+            "Automáticas (A)": tot_automaticas,
+            "% líneas rectificadas": tot_pct
+        }])
+
+        df_final_tiendas = pd.concat([df_tiendas_disp, fila_total], ignore_index=True)
+
+        # Formatear el porcentaje a string con coma decimal (ej. 8,59 %)
+        df_final_tiendas["% líneas rectificadas"] = df_final_tiendas["% líneas rectificadas"].apply(lambda x: f"{x:.2f} %".replace(".", ","))
+
+        st.dataframe(df_final_tiendas, width="stretch", hide_index=True)
+
+    # Tabla General con Datos Filtrados
     st.subheader("📋 Registros Filtrados")
     st.dataframe(df, width="stretch")
 
