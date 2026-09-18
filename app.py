@@ -50,7 +50,12 @@ def cargar_datos():
         }
         df["Estado Rectificación"] = estado_limpio.map(mapa_estados).fillna("N - Nulo")
     
-    # 5. Métricas numéricas
+    # 5. Tratamiento del campo AREA
+    col_area = "AREA" if "AREA" in df.columns else ("Area" if "Area" in df.columns else None)
+    if col_area:
+        df["AREA_Limpia"] = df[col_area].fillna("Sin Área").astype(str).str.replace(r"\.0$", "", regex=True)
+    
+    # 6. Métricas numéricas
     for col in ["Total Unidades", "Precio medio de coste"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -67,74 +72,96 @@ try:
 
     # Sidebar: Filtros de Búsqueda
     st.sidebar.header("🔍 Filtros de Búsqueda")
-    
-    # Filtro por Tienda Destino
-    if "Tienda" in df.columns:
-        tiendas = sorted([str(x) for x in df["Tienda"].unique()])
-        tienda_sel = st.sidebar.multiselect("Tienda:", tiendas, default=tiendas)
-        df = df[df["Tienda"].isin(tienda_sel)]
 
-    # Filtro por Tienda que Grabó
+    # 1. Filtro por Tienda que Grabó
     if "Tienda que Grabo" in df.columns:
         tiendas_grabo = sorted([str(x) for x in df["Tienda que Grabo"].unique()])
         tienda_grabo_sel = st.sidebar.multiselect("Tienda que Grabó:", tiendas_grabo, default=tiendas_grabo)
         df = df[df["Tienda que Grabo"].isin(tienda_grabo_sel)]
 
-    # Filtro por Estado Rectificación (Incluye N - Nulo)
+    # 2. Filtro por Área
+    if "AREA_Limpia" in df.columns:
+        areas = sorted([str(x) for x in df["AREA_Limpia"].unique()])
+        area_sel = st.sidebar.multiselect("Área:", areas, default=areas)
+        df = df[df["AREA_Limpia"].isin(area_sel)]
+
+    # 3. Filtro por Estado Rectificación (Incluye N - Nulo)
     if "Estado Rectificación" in df.columns:
         estados = sorted([str(x) for x in df["Estado Rectificación"].unique()])
         estado_sel = st.sidebar.multiselect("Estado Rectificación:", estados, default=estados)
         df = df[df["Estado Rectificación"].isin(estado_sel)]
 
-    # Filtro por Almacén
+    # 4. Filtro por Almacén
     if "Almacen" in df.columns:
         almacenes = sorted([str(x) for x in df["Almacen"].fillna("Sin Almacén").astype(str).unique()])
         almacen_sel = st.sidebar.multiselect("Almacén:", almacenes, default=almacenes)
         df = df[df["Almacen"].fillna("Sin Almacén").astype(str).isin(almacen_sel)]
 
-    # Filtros de Tiempo
+    # 5. Filtro por Año
     if "Año" in df.columns and df["Año"].notna().any():
         anios = sorted([int(x) for x in df["Año"].dropna().unique()], reverse=True)
         if anios:
             anio_sel = st.sidebar.multiselect("Año:", anios, default=anios)
             df = df[df["Año"].isin(anio_sel) | df["Año"].isna()]
 
+    # 6. Filtro por Mes
     if "Mes" in df.columns and df["Mes"].notna().any():
         meses = sorted([int(x) for x in df["Mes"].dropna().unique()])
         if meses:
             mes_sel = st.sidebar.multiselect("Mes:", meses, default=meses)
             df = df[df["Mes"].isin(mes_sel) | df["Mes"].isna()]
 
+    # 7. Filtro por N° Semana
+    if "N° Semana" in df.columns and df["N° Semana"].notna().any():
+        semanas = sorted([int(x) for x in df["N° Semana"].dropna().unique()])
+        if semanas:
+            semana_sel = st.sidebar.multiselect("N° Semana:", semanas, default=semanas)
+            df = df[df["N° Semana"].isin(semana_sel) | df["N° Semana"].isna()]
+
+    # 8. Filtro por Día
+    if "Día" in df.columns and df["Día"].notna().any():
+        dias = sorted([int(x) for x in df["Día"].dropna().unique()])
+        if dias:
+            dia_sel = st.sidebar.multiselect("Día del Mes:", dias, default=dias)
+            df = df[df["Día"].isin(dia_sel) | df["Día"].isna()]
+
     # FILA 1: Métricas Generales del Negocio
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Líneas Despachadas (Total)", f"{len(df):,}")
+    m1, m2, m3, m4 = st.columns(4)
+    
+    if "Art-Mov" in df.columns:
+        art_mov_unicos = df["Art-Mov"].nunique()
+        m1.metric("Líneas Despachadas (Art-Mov Únicos)", f"{art_mov_unicos:,}")
+    else:
+        m1.metric("Líneas Despachadas", f"{len(df):,}")
+        
+    m2.metric("Total Registros (Filas)", f"{len(df):,}")
     
     if "Total Unidades" in df.columns:
-        m2.metric("Total Unidades", f"{int(df['Total Unidades'].sum(skipna=True)):,}")
+        m3.metric("Total Unidades", f"{int(df['Total Unidades'].sum(skipna=True)):,}")
         
     costo_total = df["Costo_Linea"].sum(skipna=True) if "Costo_Linea" in df.columns else 0
-    m3.metric("Costo Total Est.", f"")
+    m4.metric("Costo Total Est.", f"")
 
     st.markdown("---")
 
     # FILA 2: Recuento Individual por Cada Estado
-    st.subheader("📊 Desglose por Estado de Rectificación")
+    st.subheader("📊 Desglose por Estado de Rectificación (Art-Mov Únicos)")
     e1, e2, e3, e4, e5 = st.columns(5)
     
-    if "Estado Rectificación" in df.columns:
-        confirmadas = len(df[df["Estado Rectificación"] == "Confirmada"])
+    if "Estado Rectificación" in df.columns and "Art-Mov" in df.columns:
+        confirmadas = df[df["Estado Rectificación"] == "Confirmada"]["Art-Mov"].nunique()
         e1.metric("Confirmadas (M)", f"{confirmadas:,}")
 
-        rechazadas = len(df[df["Estado Rectificación"] == "Rechazada"])
+        rechazadas = df[df["Estado Rectificación"] == "Rechazada"]["Art-Mov"].nunique()
         e2.metric("Rechazadas (R)", f"{rechazadas:,}")
 
-        pendientes = len(df[df["Estado Rectificación"] == "Pendiente"])
+        pendientes = df[df["Estado Rectificación"] == "Pendiente"]["Art-Mov"].nunique()
         e3.metric("Pendientes (P)", f"{pendientes:,}")
 
-        automaticas = len(df[df["Estado Rectificación"] == "Automática"])
+        automaticas = df[df["Estado Rectificación"] == "Automática"]["Art-Mov"].nunique()
         e4.metric("Automáticas (A)", f"{automaticas:,}")
 
-        nulas = len(df[df["Estado Rectificación"] == "N - Nulo"])
+        nulas = df[df["Estado Rectificación"] == "N - Nulo"]["Art-Mov"].nunique()
         e5.metric("Nulas / Vacías (N)", f"{nulas:,}")
 
     st.markdown("---")
