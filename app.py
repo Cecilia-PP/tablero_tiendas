@@ -6,7 +6,7 @@ import plotly.express as px
 # Configuración de pantalla ancha y título
 st.set_page_config(page_title="Conformidad de entregas", layout="wide")
 
-# Etiqueta para bloquear la traducción automática del navegador y evitar el error removeChild
+# Etiqueta para bloquear la traducción automática del navegador
 st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
 
 st.title("📦 Conformidad de entregas")
@@ -217,7 +217,7 @@ try:
     nivel_seleccionado = st.selectbox(
         "Nivel de detalle para el Eje X de los gráficos:",
         options=list(opciones_eje_x.keys()),
-        index=2,
+        index=1,
         key="select_nivel_eje_x"
     )
     
@@ -250,47 +250,65 @@ try:
             st.markdown(f"**Líneas despachadas vs rectificadas**")
             fig1 = go.Figure()
 
-            # Barras Rosas
+            # Barras Rosas con número entero completo
             fig1.add_trace(go.Bar(
                 x=eje_x_labels,
                 y=grouped["lineas_despachadas"],
                 name="Líneas despachadas",
-                marker_color="#E06666"
+                marker_color="#E06666",
+                text=[f"{v:,}" for v in grouped["lineas_despachadas"]],
+                textposition="auto",
+                textfont=dict(color="#262626"),
+                hovertemplate="Líneas despachadas: %{y:,}<extra></extra>"
             ))
 
-            # Línea Azul
+            # Línea Azul con % y cantidad exacta de notas
             fig1.add_trace(go.Scatter(
                 x=eje_x_labels,
                 y=grouped["pct_rectificadas"],
                 name="% líneas rectificadas",
                 mode="lines+markers+text",
-                text=[f"{v:.2f} %" if pd.notna(v) else "0.00 %" for v in grouped["pct_rectificadas"]],
+                text=[f"{pct:.2f}% ({notas:,} notas)" for pct, notas in zip(grouped["pct_rectificadas"], grouped["notas_art"])],
                 textposition="top center",
-                textfont=dict(size=11),
+                textfont=dict(size=10, color="#262626"),
                 line=dict(color="#1155CC", width=3),
                 marker=dict(color="#1155CC", size=7),
-                yaxis="y2"
+                yaxis="y2",
+                hovertemplate="% Rectificadas: %{y:.2f}%<extra></extra>"
             ))
 
             fig1.update_layout(
                 template="streamlit",
+                font=dict(color="#262626"),
                 xaxis=dict(
-                    title=nivel_seleccionado, 
+                    title=dict(text=nivel_seleccionado, font=dict(color="#262626")), 
                     type="category",
                     categoryorder="array",
                     categoryarray=list(eje_x_labels),
                     tickangle=-45, 
-                    tickfont=dict(size=10)
+                    tickfont=dict(size=10, color="#262626")
                 ),
-                yaxis=dict(title="", showgrid=True),
-                yaxis2=dict(title="", overlaying="y", side="right", ticksuffix=" %", showgrid=False),
+                yaxis=dict(
+                    title="", 
+                    showgrid=True, 
+                    tickformat=",", 
+                    tickfont=dict(color="#262626")
+                ),
+                yaxis2=dict(
+                    title="", 
+                    overlaying="y", 
+                    side="right", 
+                    ticksuffix=" %", 
+                    showgrid=False, 
+                    tickfont=dict(color="#262626")
+                ),
                 legend=dict(
                     orientation="h", 
                     yanchor="bottom", 
                     y=1.02, 
                     xanchor="left", 
                     x=0,
-                    font=dict(size=12)
+                    font=dict(size=12, color="#262626")
                 ),
                 margin=dict(l=20, r=20, t=40, b=30),
                 paper_bgcolor="rgba(0,0,0,0)",
@@ -338,22 +356,28 @@ try:
                     fig2.update_layout(
                         template="streamlit",
                         barmode="stack",
+                        font=dict(color="#262626"),
                         xaxis=dict(
-                            title=nivel_seleccionado, 
+                            title=dict(text=nivel_seleccionado, font=dict(color="#262626")), 
                             type="category",
                             categoryorder="array",
                             categoryarray=list(eje_x_rect_labels),
                             tickangle=-45, 
-                            tickfont=dict(size=10)
+                            tickfont=dict(size=10, color="#262626")
                         ),
-                        yaxis=dict(ticksuffix="%", range=[0, 100], showgrid=True),
+                        yaxis=dict(
+                            ticksuffix="%", 
+                            range=[0, 100], 
+                            showgrid=True, 
+                            tickfont=dict(color="#262626")
+                        ),
                         legend=dict(
                             orientation="h", 
                             yanchor="bottom", 
                             y=1.02, 
                             xanchor="left", 
                             x=0,
-                            font=dict(size=12)
+                            font=dict(size=12, color="#262626")
                         ),
                         margin=dict(l=20, r=20, t=40, b=30),
                         paper_bgcolor="rgba(0,0,0,0)",
