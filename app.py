@@ -214,10 +214,11 @@ try:
         "Fecha": "Fecha Formateada"
     }
     
+    # 'Mes' seleccionado por defecto (index=1)
     nivel_seleccionado = st.selectbox(
         "Nivel de detalle para el Eje X de los gráficos:",
         options=list(opciones_eje_x.keys()),
-        index=2,
+        index=1,
         key="select_nivel_eje_x"
     )
     
@@ -424,10 +425,6 @@ try:
         df_final_tiendas["% líneas rectificadas"] = df_final_tiendas["% líneas rectificadas"].apply(lambda x: f"{x:.2f} %".replace(".", ","))
 
         st.dataframe(df_final_tiendas, width="stretch", hide_index=True, key="tabla_resumen_tiendas")
-
-    # TABLA GENERAL DETALLADA
-    st.subheader("📋 Detalle")
-    st.dataframe(df, width="stretch", key="tabla_detalle_general")
 
 except FileNotFoundError:
     st.error("⚠️ No se encontró el archivo 'movimientos_tiendas.parquet'.")
