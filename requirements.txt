@@ -1,4 +1,4 @@
 ﻿streamlit
 pandas
-pyarrow
+pyarrow<25.0.0
 plotly
