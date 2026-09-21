@@ -214,11 +214,10 @@ try:
         "Fecha": "Fecha Formateada"
     }
     
-    # 'Mes' seleccionado por defecto (index=1)
     nivel_seleccionado = st.selectbox(
         "Nivel de detalle para el Eje X de los gráficos:",
         options=list(opciones_eje_x.keys()),
-        index=1,
+        index=2,
         key="select_nivel_eje_x"
     )
     
